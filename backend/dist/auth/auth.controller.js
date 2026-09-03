@@ -1,16 +1,19 @@
-import { loginSchema, registerSchema } from "./auth.validation.js";
-import { loginUser, registerUser } from "./auth.service.js";
+import { loginUser, registerUser, } from "./auth.service.js";
+import { loginSchema, registerSchema, } from "./auth.validation.js";
+/* =========================
+   REGISTER
+========================= */
 export const register = async (req, res) => {
     try {
-        const validation = registerSchema.safeParse(req.body);
-        if (!validation.success) {
+        const result = registerSchema.safeParse(req.body);
+        if (!result.success) {
             return res.status(400).json({
                 success: false,
-                message: "Validation failed",
-                errors: validation.error.flatten().fieldErrors,
+                message: "Invalid registration data",
+                errors: result.error.flatten(),
             });
         }
-        const user = await registerUser(validation.data);
+        const user = await registerUser(result.data);
         return res.status(201).json({
             success: true,
             message: "User registered successfully",
@@ -19,65 +22,69 @@ export const register = async (req, res) => {
     }
     catch (error) {
         console.error("Register error:", error);
-        const message = error instanceof Error ? error.message : "Registration failed";
-        if (message === "User with this email already exists") {
-            return res.status(409).json({
-                success: false,
-                message,
-            });
-        }
-        return res.status(500).json({
+        return res.status(400).json({
             success: false,
-            message: "Registration failed",
+            message: error?.message || "Registration failed",
         });
     }
 };
+/* =========================
+   LOGIN
+========================= */
 export const login = async (req, res) => {
     try {
-        const validation = loginSchema.safeParse(req.body);
-        if (!validation.success) {
+        const result = loginSchema.safeParse(req.body);
+        if (!result.success) {
             return res.status(400).json({
                 success: false,
-                message: "Validation failed",
-                errors: validation.error.flatten().fieldErrors,
+                message: "Invalid login data",
+                errors: result.error.flatten(),
             });
         }
-        const result = await loginUser(validation.data);
-        res.cookie("token", result.token, {
+        const { user, token } = await loginUser(result.data);
+        /*
+         * Production:
+         * Frontend = Vercel
+         * Backend = Render
+         *
+         * Therefore the cookie must work
+         * across these HTTPS domains.
+         */
+        res.cookie("token", token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-            maxAge: 24 * 60 * 60 * 1000,
+            sameSite: process.env.NODE_ENV === "production"
+                ? "none"
+                : "lax",
+            maxAge: 7 * 24 * 60 * 60 * 1000,
         });
         return res.status(200).json({
             success: true,
             message: "Login successful",
-            user: result.user,
+            user,
         });
     }
     catch (error) {
         console.error("Login error:", error);
-        const message = error instanceof Error ? error.message : "Login failed";
-        if (message === "Invalid email or password") {
-            return res.status(401).json({
-                success: false,
-                message,
-            });
-        }
-        return res.status(500).json({
+        return res.status(401).json({
             success: false,
-            message: "Login failed",
+            message: error?.message || "Invalid email or password",
         });
     }
 };
-export const logout = async (req, res) => {
+/* =========================
+   LOGOUT
+========================= */
+export const logout = (_req, res) => {
     res.clearCookie("token", {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        sameSite: process.env.NODE_ENV === "production"
+            ? "none"
+            : "lax",
     });
     return res.status(200).json({
         success: true,
-        message: "Logout successful",
+        message: "Logged out successfully",
     });
 };
